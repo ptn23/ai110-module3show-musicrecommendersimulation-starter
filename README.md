@@ -29,6 +29,12 @@ Some prompts to answer:
 
 You can include a simple diagram or bullet list if helpful.
 
+
+Each song will have five main traits: energy, valence, acousticness, danceability, bpm.
+
+I plan for UserProfile to show the songs I already have and a list of song I might potentially like.
+
+Songs will be recommend based on the 5 factors, with energy and valence getting 30% each, acousticness 20%, and danceability and bpm 10% each.
 ---
 
 ## Getting Started

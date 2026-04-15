@@ -1,0 +1,19 @@
+flowchart TD
+    A([User Preferences\n
+    genre · mood · energy · valence
+    acousticness · danceability · bpm]) --> B
+
+    B[Load songs.csv\n20 songs] --> C
+
+    C{For each song...} --> D
+
+    D[Score the song\n\n+ 4.0 genre match\n+ 2.0 mood match\n+ 3.0 × energy sim\n+ 2.0 × valence sim\n+ 1.5 × acousticness sim\n+ 1.0 × danceability sim\n+ 0.5 × bpm sim] --> E
+
+    E[Append score\nto results list] --> F{More songs?}
+
+    F -- Yes --> C
+    F -- No --> G
+
+    G[Sort results\nby score descending] --> H
+
+    H([Top K Recommendations\nTitle · Artist · Score])
