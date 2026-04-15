@@ -1,3 +1,5 @@
+TO VIEW IMAGES, REFER TO THE images FILE ABOVE
+
 # Music Recommender Simulation
 
 ## Project Summary
