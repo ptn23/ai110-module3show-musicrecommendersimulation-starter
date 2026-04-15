@@ -1,4 +1,4 @@
-TO VIEW IMAGES, REFER TO THE images FILE ABOVE
+# TO VIEW SCREENSHOTS, REFER TO THE images FILE ABOVE
 
 # Music Recommender Simulation
 
