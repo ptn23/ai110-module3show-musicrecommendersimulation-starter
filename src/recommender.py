@@ -1,6 +1,54 @@
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
+
+# ---------------------------------------------------------------------------
+# Strategy pattern — each ScoringStrategy is a named set of weights.
+# Pass one to score_song() or recommend_songs() to switch ranking behaviour.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ScoringStrategy:
+    """Holds all scoring weights for one ranking mode."""
+    name: str
+    genre_pts: float        # flat bonus for a genre match
+    mood_pts: float         # flat bonus for a mood match
+    energy_w: float         # multiplier for energy proximity
+    valence_w: float        # multiplier for valence proximity
+    acousticness_w: float   # multiplier for acousticness proximity
+    danceability_w: float   # multiplier for danceability proximity
+    bpm_w: float            # multiplier for tempo proximity
+
+
+# Mood is the primary lens — best for "how do I want to feel right now" users.
+MOOD_FIRST = ScoringStrategy(
+    name="Mood-First",
+    genre_pts=1.5, mood_pts=5.0,
+    energy_w=4.0, valence_w=3.0, acousticness_w=1.5,
+    danceability_w=1.0, bpm_w=0.5,
+)
+
+# Genre anchors the result — best for "I only want rock / only want lofi" users.
+GENRE_FIRST = ScoringStrategy(
+    name="Genre-First",
+    genre_pts=6.0, mood_pts=2.0,
+    energy_w=3.0, valence_w=2.0, acousticness_w=1.5,
+    danceability_w=1.0, bpm_w=0.5,
+)
+
+# Energy dominates — best for activity-based use (workout, study, sleep).
+ENERGY_FOCUSED = ScoringStrategy(
+    name="Energy-Focused",
+    genre_pts=1.0, mood_pts=2.0,
+    energy_w=8.0, valence_w=1.5, acousticness_w=1.0,
+    danceability_w=1.0, bpm_w=1.0,
+)
+
+# Registry lets main.py look up a strategy by name string.
+STRATEGIES: Dict[str, ScoringStrategy] = {
+    s.name: s for s in [MOOD_FIRST, GENRE_FIRST, ENERGY_FOCUSED]
+}
+
 @dataclass
 class Song:
     """
@@ -73,72 +121,70 @@ def load_songs(csv_path: str) -> List[Dict]:
             })
     return songs
 
-def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
+def score_song(
+    user_prefs: Dict,
+    song: Dict,
+    strategy: ScoringStrategy = MOOD_FIRST,
+) -> Tuple[float, List[str]]:
     """
-    Scores a single song against user preferences.
-    Required by recommend_songs() and src/main.py
+    Scores a single song against user preferences using the given strategy.
     Returns (total_score, list_of_reason_strings).
     """
     score = 0.0
     reasons = []
 
-    # --- Categorical matches ---
-    # Mood outweighs genre: mood describes the emotional experience directly;
-    # genre is a broader style bucket that can contain many different moods.
+    # --- Categorical matches (flat bonuses defined by the strategy) ---
     if user_prefs.get("genre") and song["genre"] == user_prefs["genre"]:
-        score += 3.0
-        reasons.append(f"genre match ({song['genre']}): +3.0")
+        score += strategy.genre_pts
+        reasons.append(f"genre match ({song['genre']}): +{strategy.genre_pts}")
 
     if user_prefs.get("mood") and song["mood"] == user_prefs["mood"]:
-        score += 4.0
-        reasons.append(f"mood match ({song['mood']}): +4.0")
+        score += strategy.mood_pts
+        reasons.append(f"mood match ({song['mood']}): +{strategy.mood_pts}")
 
-    # --- Continuous similarity: weight × (1 - |user - song|) ---
+    # --- Continuous similarity: weight x (1 - |user - song|) ---
     if "energy" in user_prefs:
-        pts = 3.0 * (1 - abs(user_prefs["energy"] - song["energy"]))
+        pts = strategy.energy_w * (1 - abs(user_prefs["energy"] - song["energy"]))
         score += pts
         reasons.append(f"energy sim: +{pts:.2f}")
 
     if "valence" in user_prefs:
-        pts = 2.0 * (1 - abs(user_prefs["valence"] - song["valence"]))
+        pts = strategy.valence_w * (1 - abs(user_prefs["valence"] - song["valence"]))
         score += pts
         reasons.append(f"valence sim: +{pts:.2f}")
 
     if "acousticness" in user_prefs:
-        pts = 1.5 * (1 - abs(user_prefs["acousticness"] - song["acousticness"]))
+        pts = strategy.acousticness_w * (1 - abs(user_prefs["acousticness"] - song["acousticness"]))
         score += pts
         reasons.append(f"acousticness sim: +{pts:.2f}")
 
     if "danceability" in user_prefs:
-        pts = 1.0 * (1 - abs(user_prefs["danceability"] - song["danceability"]))
+        pts = strategy.danceability_w * (1 - abs(user_prefs["danceability"] - song["danceability"]))
         score += pts
         reasons.append(f"danceability sim: +{pts:.2f}")
 
     if "tempo_bpm" in user_prefs:
-        pts = 0.5 * max(0, 1 - abs(user_prefs["tempo_bpm"] - song["tempo_bpm"]) / 40)
+        pts = strategy.bpm_w * max(0, 1 - abs(user_prefs["tempo_bpm"] - song["tempo_bpm"]) / 40)
         score += pts
         reasons.append(f"bpm sim: +{pts:.2f}")
 
     return score, reasons
 
 
-def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
+def recommend_songs(
+    user_prefs: Dict,
+    songs: List[Dict],
+    k: int = 5,
+    strategy: ScoringStrategy = MOOD_FIRST,
+) -> List[Tuple[Dict, float, str]]:
     """
-    Functional implementation of the recommendation logic.
-    Required by src/main.py
+    Ranks all songs by score under the given strategy and returns the top-k.
     Returns a list of (song_dict, score, explanation) tuples, best first.
     """
-    # Score every song — list comprehension builds the full results list
-    # without mutating the original `songs` list.
     scored = [
         (song, score, ", ".join(reasons))
         for song in songs
-        for score, reasons in [score_song(user_prefs, song)]
+        for score, reasons in [score_song(user_prefs, song, strategy)]
     ]
-
-    # sorted() returns a NEW list sorted by score descending.
-    # .sort() would sort in-place and return None — fine here, but
-    # sorted() is preferred when the caller's list should stay unchanged.
     ranked = sorted(scored, key=lambda x: x[1], reverse=True)
-
     return ranked[:k]
